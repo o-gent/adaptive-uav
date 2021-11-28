@@ -27,8 +27,8 @@ int dihedral_pin = 13;
 int dihedral_pos = 0;
 
 Servo sweep_servo;
-int dihedral_pin = 13;
-int dihedral_pos = 0;
+int sweep_pin = 13;
+int sweep_pos = 0;
 
 /*
     IMU setup
