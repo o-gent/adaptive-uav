@@ -1,13 +1,12 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Adafruit_BNO055.h>
-#include <WiFi.h>
-#include <ESPAsyncWebServer.h>
 
-// dependancies
-#include <Adafruit_Sensor.h>
 #include <utility/imumaths.h>
 #include <SPI.h>
+#include "Wire.h"
+#include "Adafruit_Sensor.h"
+
 
 /*
     General
@@ -16,14 +15,24 @@
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
 unsigned long tStart = 0; // keep track of loop time
 
+
 /* 
-    Webserial setup
+    Debug library stuff
 */
+#define HOST_NAME "remotedebug"
+#define USE_MDNS true
+#include <WiFi.h>
+#ifdef USE_MDNS
+    #include <DNSServer.h>
+    #include "ESPmDNS.h"
+#endif
 
-AsyncWebServer server(80);
-AsyncWebSocket ws("/ws");
+#include "RemoteDebug.h"
 
-const char* ssid = "DESKTOP-2J7JM8Q 6736";    // Your WiFi SSID
+RemoteDebug Debug;
+
+// SSID and password
+const char* ssid = "DESKTOP-2J7JM8Q 6736";
 const char* password = "gentnet69";
 
 /*
@@ -45,8 +54,12 @@ int sweep_pos = 0;
 // Set the delay between fresh samples
 uint16_t BNO055_SAMPLERATE_DELAY_MS = 10;
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
-//velocity = accel*dt (dt in seconds)
-//position = 0.5*accel*dt^2
+
+
+// Time
+
+uint32_t mLastTime = 0;
+uint32_t mTimeSeconds = 0;
 
 /*
     functions
@@ -56,62 +69,13 @@ char* convert(float var) {
     return dtostrf(var, 6, 2, result);
 }
 
-char* sensor_data(char * data) {
-    // Get IMU data
-    sensors_event_t event;
-    bno.getEvent(&event);
 
-    //client->text(convert((float)event.orientation.x));
-    //client->text(convert((float)event.orientation.y));
-    //client->text(convert((float)event.orientation.z));
-
-    // sensors_event_t orientationData , accelData, gyroData;
-    
-    // bno.getEvent(&orientationData, Adafruit_BNO055::VECTOR_EULER);
-    // bno.getEvent(&gyroData, Adafruit_BNO055::VECTOR_GYROSCOPE);
-    // bno.getEvent(&accelData, Adafruit_BNO055::VECTOR_LINEARACCEL);
-}
-
-void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
- 
-    if(type == WS_EVT_CONNECT){
-
-        Serial.println("Websocket client connection received");
-        client->text("Hello from ESP32 Server");
-    
-    } else if(type == WS_EVT_DISCONNECT){
-        Serial.println("Client disconnected");
-    
-    } else if(type == WS_EVT_DATA){
-
-        // do something based on the input
-
-        switch(data[0]){
-            case 'd':
-                // send data
-            case 'f':
-                // fire the catapult
-                allTime = micros();
-                Serial.println("catapult");
-        }
-    }
-}
-
-
-
-/*
-    Main Loop
-*/
 
 void setup() {
-    /*
-        General
-    */
-    Serial.begin(9600);
+    Serial.begin(230400);
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
 
-    /*
-        IMU
-    */
     // Initialise the sensor
     if(!bno.begin())
     {
@@ -126,40 +90,84 @@ void setup() {
     */
     dihedral_servo.attach(dihedral_pin);
 
-    /*
-        Web
-    */
-    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+    // WiFi connection
+
     WiFi.begin(ssid, password);
-    
+    Serial.println("");
+
+    // Wait for connection
     while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.println("Connecting to WiFi..");
+      delay(500);
+      Serial.print(".");
     }
-    
+
+    Serial.println("");
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
 
-    ws.onEvent(onWsEvent);
-    server.addHandler(&ws);
+    // Register host name in WiFi and mDNS
+
+    String hostNameWifi = HOST_NAME;
+    hostNameWifi.concat(".local");
+
+    #ifdef USE_MDNS  // Use the MDNS ?
+
+        if (MDNS.begin(HOST_NAME)) {
+            Serial.print("* MDNS responder started. Hostname -> ");
+            Serial.println(HOST_NAME);
+        }
+
+        MDNS.addService("telnet", "tcp", 23);
+
+    #endif
+
+	// Initialize RemoteDebug
+
+	Debug.begin(HOST_NAME); // Initialize the WiFi server
+
+    Debug.setResetCmdEnabled(true); // Enable the reset command
+	Debug.showProfiler(false); // Profiler (Good to measure times, to optimize codes)
+	Debug.showColors(false); // Colors
+
+    // End off setup
+
+    Serial.print("WiFI connected. IP address: ");
+    Serial.println(WiFi.localIP());
+
     
-    server.begin();
+    
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    delay(500);
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+    delay(200);
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+
+    allTime = micros();
+
 }
 
-
-void loop() {
-    Serial.println("HELOO");
-
+void loop()
+{
     tStart = micros();
 
-    dihedral_pos += 1;
-    dihedral_servo.writeMicroseconds(dihedral_pos);
-    if (dihedral_pos == 2500) {
-        dihedral_pos = 1000;
-    }
+    sensors_event_t event;
+    bno.getEvent(&event);
 
-    sensor_data();
-    
+    unsigned long current_time = micros() - allTime;
+
+	debugI("%lu    %f    %f    %f", current_time , event.orientation.x, event.orientation.y, event.orientation.z);
+
+    Debug.handle();
+
     while ((micros() - tStart) < (BNO055_SAMPLERATE_DELAY_MS * 1000)) {
         //poll until the next sample is ready
+        yield();
+        //???
     }
 }
+
+// Function example to show a new auto function name of debug* macros
+
+/////////// End
