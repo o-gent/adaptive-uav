@@ -70,7 +70,6 @@ char* convert(float var) {
 }
 
 
-
 void setup() {
     Serial.begin(230400);
     pinMode(LED_BUILTIN, OUTPUT);
@@ -148,8 +147,8 @@ void setup() {
 
 }
 
-void loop()
-{
+
+void loop() {
     tStart = micros();
 
     sensors_event_t event;
@@ -157,7 +156,15 @@ void loop()
 
     unsigned long current_time = micros() - allTime;
 
-	debugI("%lu    %f    %f    %f", current_time , event.orientation.x, event.orientation.y, event.orientation.z);
+	debugI("%lu    %f    %f    %f    %f    %f    %f", 
+        current_time, 
+        event.orientation.x,
+        event.orientation.y, 
+        event.orientation.z, 
+        event.acceleration.x, 
+        event.acceleration.y, 
+        event.acceleration.z
+    );
 
     Debug.handle();
 
@@ -167,7 +174,3 @@ void loop()
         //???
     }
 }
-
-// Function example to show a new auto function name of debug* macros
-
-/////////// End
