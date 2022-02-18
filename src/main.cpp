@@ -151,19 +151,21 @@ void setup() {
 void loop() {
     tStart = micros();
 
-    sensors_event_t event;
-    bno.getEvent(&event);
+    sensors_event_t orientation_data, accelerometer_data;
+    bno.getEvent(&orientation_data, Adafruit_BNO055::VECTOR_EULER);
+    bno.getEvent(&accelerometer_data, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    
 
     unsigned long current_time = micros() - allTime;
 
 	debugI("%lu    %f    %f    %f    %f    %f    %f", 
         current_time, 
-        event.orientation.x,
-        event.orientation.y, 
-        event.orientation.z, 
-        event.acceleration.x, 
-        event.acceleration.y, 
-        event.acceleration.z
+        orientation_data.orientation.x,
+        orientation_data.orientation.y, 
+        orientation_data.orientation.z, 
+        accelerometer_data.acceleration.x, 
+        accelerometer_data.acceleration.y, 
+        accelerometer_data.acceleration.z
     );
 
     Debug.handle();

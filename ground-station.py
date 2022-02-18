@@ -7,7 +7,7 @@ f = open(f"logs/log_{record_time}.log", "w+")
 
 store = []
 
-tn = Telnet('192.168.137.103', 23)
+tn = Telnet(f'192.168.137.{input("IP ending:")}', 23)
 try:
     while True:
         newline = tn.read_until(match=b'\n', timeout=1).decode("utf-8")
