@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Adafruit_BNO055.h>
+#include <FastLED.h>
 
 #include <utility/imumaths.h>
 #include <SPI.h>
@@ -11,7 +12,12 @@
 /*
     General
 */
-
+// How many leds in your strip?
+#define NUM_LEDS 1
+#define DATA_PIN 5
+#define CLOCK_PIN 13
+CRGB leds[NUM_LEDS];
+int led_selector = 0;
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
 unsigned long tStart = 0; // keep track of loop time
 
@@ -38,7 +44,6 @@ const char* password = "gentnet69";
 /*
     Servo setup
 */
-
 Servo dihedral_servo;
 int dihedral_pin = 25;
 int dihedral_pos = 0;
@@ -64,16 +69,28 @@ uint32_t mTimeSeconds = 0;
 /*
     functions
 */
-char result[8];
-char* convert(float var) {
-    return dtostrf(var, 6, 2, result);
+
+void delayy(unsigned long ms) {
+    uint32_t start = micros();
+    debugA("waiting");
+    Debug.handle();
+    while (ms > 0) {
+        while ( ms > 0 && (micros() - start) >= 1000) {
+            ms--;
+            start += 1000;
+        }
+    }
 }
 
 
 void setup() {
+
     Serial.begin(230400);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW);
+
+    // RBG LED SETUP
+    FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);  // GRB ordering is assumed
+    leds[0] = CRGB::Chocolate;
+    FastLED.show();
 
     // Initialise the sensor
     if(!bno.begin())
@@ -87,8 +104,8 @@ void setup() {
     /* 
         Servo
     */
-    dihedral_servo.attach(dihedral_pin);
-
+   dihedral_servo.attach(dihedral_pin);
+   
     // WiFi connection
 
     WiFi.begin(ssid, password);
@@ -135,16 +152,28 @@ void setup() {
     Serial.print("WiFI connected. IP address: ");
     Serial.println(WiFi.localIP());
 
-    
-    
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    delay(500);
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    delay(200);
-    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
+
+    leds[0] = CRGB::AntiqueWhite;
+    FastLED.show();
+
+    const byte buttonPin = 27;
+    pinMode(buttonPin, INPUT_PULLUP);
+    while (digitalRead(buttonPin) == HIGH){
+        delayy(500);
+    }
+
+    for(int i = 0; i<=5; i++){
+        leds[0] = CRGB::Green;
+        FastLED.show();
+        delayy(500);
+        leds[0] = CRGB::DarkRed;
+        FastLED.show();
+        delayy(500);
+    }
+    leds[0].r = 0; leds[0].g = 0; leds[0].b = 250;
 
     allTime = micros();
-
+    debugW("Launch");
 }
 
 
@@ -169,6 +198,12 @@ void loop() {
     );
 
     Debug.handle();
+
+    leds[0].r++;
+    if(leds[0].r == 254){
+        leds[0].r = 0;
+    }
+    FastLED.show();
 
     while ((micros() - tStart) < (BNO055_SAMPLERATE_DELAY_MS * 1000)) {
         //poll until the next sample is ready

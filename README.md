@@ -12,8 +12,13 @@ ESP32 program to control/log a micro UAV as part of my Aerospace MEng individual
 - board: https://wiki.dfrobot.com/FireBeetle_Board_ESP32_E_SKU_DFR0654
 - IMU: https://www.adafruit.com/product/2472
 
-## libraries used
+## library requirements
+
+Main Arduino libraries (PlatformIO)
 - IMU: https://github.com/adafruit/Adafruit_BNO055
-- Servo control: https://github.com/madhephaestus/ESP32Servo
-- WebSerial: https://github.com/ayushsharma82/WebSerial
+- Remote Debug: https://github.com/JoaoLopesF/RemoteDebug
+- Dynamixel library: https://github.com/hideakitai/Dynamixel
+
+Python
+- Catapult library https://github.com/o-gent/uav-launcher
 

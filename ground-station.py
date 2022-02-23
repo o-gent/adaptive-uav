@@ -1,6 +1,8 @@
 # https://docs.python.org/3/library/telnetlib.html
 from telnetlib import Telnet
 import time
+import uav_launcher
+
 
 record_time = time.strftime('%Y%m%d-%H%M%S')
 f = open(f"logs/log_{record_time}.log", "w+")
