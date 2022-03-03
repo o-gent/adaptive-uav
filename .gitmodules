@@ -1,0 +1,3 @@
+[submodule "uav-launcher"]
+	path = uav-launcher
+	url = https://github.com/o-gent/uav-launcher
