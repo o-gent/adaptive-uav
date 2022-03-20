@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <RemoteDebug.h>
-
 /**
  * Process Debug library messages just before delay
  * Had some problems where the debug library would disconnect without this

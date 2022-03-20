@@ -2,7 +2,7 @@
 #include <ESP32Servo.h>
 #include <Adafruit_BNO055.h>
 #include <FastLED.h>
-#include <Dynamixel.h>
+#include <Dynamixel2Arduino.h>
 #include <RemoteDebug.h>
 
 #include <utility/imumaths.h>
@@ -18,158 +18,193 @@
 /*
     General
 */
-// How many leds in your strip?
 #define NUM_LEDS 1
 #define DATA_PIN 5
-#define CLOCK_PIN 13
 
 CRGB leds[NUM_LEDS];
-int led_selector = 0;
+const byte buttonPin = 27;
+
+// Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
 unsigned long tStart = 0;  // keep track of loop time
-const byte buttonPin = 27;
+uint32_t mLastTime = 0;
+uint32_t mTimeSeconds = 0;
 
 /*
     Debug library stuff
 */
 #define HOST_NAME "remotedebug"
-
 RemoteDebug Debug;
-
-// SSID and password
+// SSID and password to local network
 const char *ssid = "DESKTOP-2J7JM8Q 6736";
-const char *password = "gentnet69";
+const char *password = "MjTNaC$VB4SA";
 
 /*
     Servo setup
 */
-#define DYNAMIXEL_SERIAL Serial2 // change as you want
-
-const uint8_t SERVO_DIHEDRAL_ID = 2;
-const uint8_t SERVO_SWEEP_ID = 3;
-const uint8_t SERVO_ELEVATOR_ID = 1;
-const uint8_t PIN_RTS = 36;
-const uint16_t DYNAMIXEL_BAUDRATE = 57600;
-
-Dynamixel dxl(PIN_RTS); // create instance with RTS pin
-
-int dxl_dihedral_goal_position[2];
-int dxl_sweep_goal_position[2];
-int dxl_elevator_goal_position[2];
+#define DXL_SERIAL Serial2
+const uint8_t DXL_DIR_PIN = A4; // DYNAMIXEL Shield DIR PIN
+const uint8_t DXL_ID = 2;
+const float DXL_PROTOCOL_VERSION = 2.0;
+Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
+using namespace ControlTableItem;
 
 /*
     IMU setup
 */
-
-// Set the delay between fresh samples
-uint16_t BNO055_SAMPLERATE_DELAY_MS = 10;
+uint16_t BNO055_SAMPLERATE_DELAY_MS = 10; // Set the delay between fresh samples
 Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
 
-// Time
+/**
+ * check we are actually getting IMU data
+ */
+void imu_check()
+{
+    sensors_event_t accelerometer_data;
+    bno.getEvent(&accelerometer_data, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    if (accelerometer_data.acceleration.y == 0)
+    {
+        Serial.println("Accelerometer reading 0");
+        debugI("Accelerometer reading 0");
+        FastLED.showColor(CRGB::Red);
+        delayy(1000, Debug);
+    }
+}
 
-uint32_t mLastTime = 0;
-uint32_t mTimeSeconds = 0;
+/**
+ * poll button state change
+ */
+void wait_for_button_press()
+{
+    pinMode(buttonPin, INPUT_PULLUP);
+    while (digitalRead(buttonPin) == HIGH)
+        delayy(500, Debug);
+}
 
+/**
+ * flash the LEDs for a set time
+ */
+void countdown(int amount)
+{
+    for (int i = 0; i <= amount; i++)
+    {
+        FastLED.showColor(CRGB::Green);
+        delayy(500, Debug);
+        FastLED.showColor(CRGB::Yellow);
+        delayy(500, Debug);
+    }
+    leds[0].r = 0;
+    leds[0].g = 0;
+    leds[0].b = 250;
+}
 
+/**
+ * Initialise the WiFi connection to ground station and setup the "Debug" library
+ * Won't proceed until wifi connection established
+ */
+void wifi_telem_setup()
+{
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED)
+        delay(500);
+    Serial.print(".");
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+
+    // Register host name in WiFi and mDNS
+    String hostNameWifi = HOST_NAME;
+    hostNameWifi.concat(".local");
+    if (MDNS.begin(HOST_NAME))
+        Serial.print("* MDNS responder started. Hostname -> ");
+    Serial.println(HOST_NAME);
+    MDNS.addService("telnet", "tcp", 23);
+
+    // Initialize RemoteDebug
+    Debug.begin(HOST_NAME);         // Initialize the WiFi server
+    Debug.setResetCmdEnabled(true); // Enable the reset command
+    Debug.showProfiler(false);      // Profiler (Good to measure times, to optimize codes)
+    Debug.showColors(false);        // Colors
+
+    Serial.print("WiFI connected. IP address: ");
+    Serial.println(WiFi.localIP());
+}
+
+/**
+ * start and arm servos
+ */
+void servo_setup()
+{
+    dxl.begin(57600);
+    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+    
+    dxl.torqueOff(DXL_ID);
+    dxl.setOperatingMode(DXL_ID, OP_POSITION);
+
+    dxl.torqueOn(DXL_ID);
+    dxl.writeControlTableItem(PROFILE_VELOCITY, DXL_ID, 0); // Use 0 for Max speed
+}
+
+/**
+ * start the IMU
+ */
+void imu_start()
+{
+    if (!bno.begin())
+    {
+        Serial.println("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
+        debugI("IMU not detected");
+        FastLED.showColor(CRGB::Red);
+    }
+    bno.setExtCrystalUse(true);
+}
+
+/**
+ * configure
+ *  - WiFi
+ *  - IMU
+ *  - Servos
+ */
 void setup()
 {
     Serial.begin(230400);
 
     // RBG LED SETUP
     FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS); // GRB ordering is assumed
-    leds[0] = CRGB::Chocolate;
-    FastLED.show();
+    FastLED.showColor(CRGB::Chocolate);
 
-    // Initialise the IMU
-    if (!bno.begin())
-        Serial.println("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-    bno.setExtCrystalUse(true);
+    wifi_telem_setup();
 
-    /*
-        Servo
-    */
-    DYNAMIXEL_SERIAL.begin(DYNAMIXEL_BAUDRATE);
-    dxl.attach(DYNAMIXEL_SERIAL, DYNAMIXEL_BAUDRATE);
-    dxl.addModel<DxlModel::X>(SERVO_DIHEDRAL_ID);
-    dxl.addModel<DxlModel::X>(SERVO_SWEEP_ID);
-    //dxl.addModel<DxlModel::X>(SERVO_ELEVATOR_ID);
+    imu_start();
+
+    servo_setup();
     
-    dxl.torqueEnable(SERVO_DIHEDRAL_ID, false);
-    dxl.torqueEnable(SERVO_SWEEP_ID, false);
-    //dxl.torqueEnable(SERVO_ELEVATOR_ID, false);
+    FastLED.showColor(CRGB::AntiqueWhite);
 
-    dxl.torqueEnable(SERVO_DIHEDRAL_ID, true);
+    wait_for_button_press();
 
-    // WiFi connection
+    countdown(5);
 
-    WiFi.begin(ssid, password);
-    while (WiFi.status() != WL_CONNECTED)
-        delay(500); Serial.print(".");
-    Serial.print("Connected to "); Serial.println(ssid);
-    Serial.print("IP address: "); Serial.println(WiFi.localIP());
-
-    // Register host name in WiFi and mDNS
-    String hostNameWifi = HOST_NAME;
-    hostNameWifi.concat(".local");
-    if (MDNS.begin(HOST_NAME))
-        Serial.print("* MDNS responder started. Hostname -> "); Serial.println(HOST_NAME);
-    MDNS.addService("telnet", "tcp", 23);
-
-    // Initialize RemoteDebug
-    Debug.begin(HOST_NAME); // Initialize the WiFi server
-    Debug.setResetCmdEnabled(true); // Enable the reset command
-    Debug.showProfiler(false);      // Profiler (Good to measure times, to optimize codes)
-    Debug.showColors(false);        // Colors
-
-    // End off setup
-
-    Serial.print("WiFI connected. IP address: "); Serial.println(WiFi.localIP());
-
-    leds[0] = CRGB::AntiqueWhite;
-    FastLED.show();
-
-    pinMode(buttonPin, INPUT_PULLUP);
-    while (digitalRead(buttonPin) == HIGH)
-        delayy(500, Debug);
-
-    for (int i = 0; i <= 5; i++)
-    {
-        leds[0] = CRGB::Green;
-        FastLED.show();
-        delayy(500, Debug);
-        leds[0] = CRGB::DarkRed;
-        FastLED.show();
-        delayy(500, Debug);
-    }
-    leds[0].r = 0;
-    leds[0].g = 0;
-    leds[0].b = 250;
+    imu_check();
 
     allTime = micros();
     debugW("Launch");
 }
 
-bool dir = true; // CW or CCW
-
+/**
+ * Send new data (IMU, Servo)
+ * calaculate / command servo positions
+ */
 void loop()
 {
     tStart = micros();
-
-    dxl.goalPosition(SERVO_DIHEDRAL_ID, dxl_dihedral_goal_position[(size_t)dir]); // move to position
-
-    delay(3000);
-
-    Serial.print("current pos = ");
-    Serial.println(dxl.presentPosition(SERVO_DIHEDRAL_ID)); // get current position
-
-    dir = !dir; // reverse direction
-
+ 
+    // telemetry send
     sensors_event_t orientation_data, accelerometer_data;
     bno.getEvent(&orientation_data, Adafruit_BNO055::VECTOR_EULER);
     bno.getEvent(&accelerometer_data, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-
     unsigned long current_time = micros() - allTime;
-
     debugI("%lu    %f    %f    %f    %f    %f    %f",
            current_time,
            orientation_data.orientation.x,
@@ -177,21 +212,16 @@ void loop()
            orientation_data.orientation.z,
            accelerometer_data.acceleration.x,
            accelerometer_data.acceleration.y,
-           accelerometer_data.acceleration.z);
-
+           accelerometer_data.acceleration.z
+        );
     Debug.handle();
-
-    leds[0].r++;
-    if (leds[0].r == 254)
-    {
-        leds[0].r = 0;
-    }
-    FastLED.show();
 
     while ((micros() - tStart) < (BNO055_SAMPLERATE_DELAY_MS * 1000))
     {
-        // poll until the next sample is ready
-        yield();
-        //???
+        // vary the LED colour so we know the loop is still running
+        leds[0].r++;
+        if (leds[0].r == 254)
+            leds[0].r = 0;
+        FastLED.show();
     }
 }
