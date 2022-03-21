@@ -44,7 +44,9 @@ const char *password = "MjTNaC$VB4SA";
 */
 #define DXL_SERIAL Serial2
 const uint8_t DXL_DIR_PIN = A4; // DYNAMIXEL Shield DIR PIN
-const uint8_t DXL_ID = 2;
+const uint8_t DIHEDRAL_ID = 2;
+const uint8_t SWEEP_ID = 3;
+const uint8_t ELEVATOR_ID = 4;
 const float DXL_PROTOCOL_VERSION = 2.0;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
@@ -139,11 +141,15 @@ void servo_setup()
     dxl.begin(57600);
     dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
     
-    dxl.torqueOff(DXL_ID);
-    dxl.setOperatingMode(DXL_ID, OP_POSITION);
+    for(int ID = 2; ID<=4; ID++)
+    {
+        dxl.torqueOff(ID);
 
-    dxl.torqueOn(DXL_ID);
-    dxl.writeControlTableItem(PROFILE_VELOCITY, DXL_ID, 0); // Use 0 for Max speed
+        dxl.setOperatingMode(ID, OP_POSITION);
+        dxl.writeControlTableItem(PROFILE_VELOCITY, ID, 0); // Use 0 for Max speed
+    
+        dxl.torqueOn(ID);
+    }
 }
 
 /**

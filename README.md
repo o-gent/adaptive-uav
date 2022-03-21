@@ -17,8 +17,7 @@ ESP32 program to control/log a micro UAV as part of my Aerospace MEng individual
 Main Arduino libraries (PlatformIO)
 - IMU: https://github.com/adafruit/Adafruit_BNO055
 - Remote Debug: https://github.com/JoaoLopesF/RemoteDebug
-- Dynamixel library: https://github.com/hideakitai/Dynamixel
+- Dynamixel library: https://github.com/ROBOTIS-GIT/Dynamixel2Arduino
 
 Python
 - Catapult library https://github.com/o-gent/uav-launcher
-
