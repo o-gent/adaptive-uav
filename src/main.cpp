@@ -124,10 +124,10 @@ void wifi_telem_setup()
     MDNS.addService("telnet", "tcp", 23);
 
     // Initialize RemoteDebug
-    Debug.begin(HOST_NAME);         // Initialize the WiFi server
-    Debug.setResetCmdEnabled(true); // Enable the reset command
-    Debug.showProfiler(false);      // Profiler (Good to measure times, to optimize codes)
-    Debug.showColors(false);        // Colors
+    Debug.begin(HOST_NAME);
+    Debug.setResetCmdEnabled(true);
+    Debug.showProfiler(false);
+    Debug.showColors(false);
 
     Serial.print("WiFI connected. IP address: ");
     Serial.println(WiFi.localIP());
@@ -144,10 +144,8 @@ void servo_setup()
     for(int ID = 2; ID<=4; ID++)
     {
         dxl.torqueOff(ID);
-
         dxl.setOperatingMode(ID, OP_POSITION);
         dxl.writeControlTableItem(PROFILE_VELOCITY, ID, 0); // Use 0 for Max speed
-    
         dxl.torqueOn(ID);
     }
 }
@@ -188,6 +186,10 @@ void setup()
     
     FastLED.showColor(CRGB::AntiqueWhite);
 
+    dxl.setGoalPosition(ELEVATOR_ID, 75, UNIT_DEGREE);
+    dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
+    dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
+
     wait_for_button_press();
 
     countdown(5);
@@ -205,7 +207,7 @@ void setup()
 void loop()
 {
     tStart = micros();
- 
+
     // telemetry send
     sensors_event_t orientation_data, accelerometer_data;
     bno.getEvent(&orientation_data, Adafruit_BNO055::VECTOR_EULER);
@@ -229,5 +231,10 @@ void loop()
         if (leds[0].r == 254)
             leds[0].r = 0;
         FastLED.show();
+
+        if(current_time > 500000){
+            dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
+            dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
+        }
     }
 }

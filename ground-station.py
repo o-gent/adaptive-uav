@@ -19,7 +19,7 @@ try:
         if newline == "":
             raise
         if newline.find("Launch")>0:
-            catapult.launch(7, 200)
+            catapult.launch(7, 150)
         store.append(newline)
 except:
     print("Connection closed")
