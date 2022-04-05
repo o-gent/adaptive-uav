@@ -24,13 +24,15 @@
 CRGB leds[NUM_LEDS];
 const byte buttonPin = 27;
 bool check = true;
-File file;
+float buffer[17500];
+unsigned int buffer_index = 0;
 
 // Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
 unsigned long tStart = 0;  // keep track of loop time
 uint32_t mLastTime = 0;
 uint32_t mTimeSeconds = 0;
+unsigned long current_time = 0;
 
 /*
     Debug library stuff
@@ -57,7 +59,7 @@ using namespace ControlTableItem;
 /*
     IMU setup
 */
-uint16_t SAMPLERATE_DELAY_US = 2500; // Set the delay between fresh samples
+#define SAMPLERATE_DELAY_US 5000; // Set the delay between fresh samples
 Adafruit_ISM330DHCX ism330dhcx;
 sensors_event_t accel;
 sensors_event_t gyro;
@@ -203,12 +205,6 @@ void setup()
     dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
     dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
 
-    if(!SPIFFS.begin(true)){
-      debugW("An Error has occurred while mounting SPIFFS");
-    }
-
-    file = SPIFFS.open("/data.txt", FILE_WRITE);
-
     wait_for_button_press();
 
     countdown(5);
@@ -228,17 +224,16 @@ void loop()
 {
     tStart = micros();
     ism330dhcx.getEvent(&accel, &gyro, &temp);
-    unsigned long current_time = micros() - allTime;
+    current_time = micros() - allTime;
     
-    file.printf("%lu\t%f\t%f\t%f\t%f\t%f\t%f\n",
-           current_time,
-           gyro.gyro.x,
-           gyro.gyro.y,
-           gyro.gyro.z,
-           accel.acceleration.x,
-           accel.acceleration.y,
-           accel.acceleration.z
-        );
+    buffer[buffer_index] = current_time;
+    buffer[buffer_index+1] = gyro.gyro.x;
+    buffer[buffer_index+2] = gyro.gyro.y;
+    buffer[buffer_index+3] = gyro.gyro.z;
+    buffer[buffer_index+4] = accel.acceleration.x;
+    buffer[buffer_index+5] = accel.acceleration.y;
+    buffer[buffer_index+6] = accel.acceleration.z;
+    buffer_index = buffer_index + 7;
     
     if ((micros() - tStart) < SAMPLERATE_DELAY_US)
     {
@@ -251,16 +246,22 @@ void loop()
         }
 
         if(current_time > 5000000){
-            // close the file and write the file to telemetry
-            file.close();
+            unsigned int buffer_index_end = buffer_index;
+            buffer_index = 0;
 
-            file = SPIFFS.open("/data.txt", FILE_READ);
-            while(file.available()){
-                String line = file.readStringUntil('\n');
-                Debug.println(line);
+            while(buffer_index <= buffer_index_end){
+                debugI("%lu\t%f\t%f\t%f\t%f\t%f\t%f\n",
+                    (unsigned long)buffer[buffer_index],
+                    buffer[buffer_index+1],
+                    buffer[buffer_index+2],
+                    buffer[buffer_index+3],
+                    buffer[buffer_index+4],
+                    buffer[buffer_index+5],
+                    buffer[buffer_index+6]
+                );
+                Debug.handle();
+                buffer_index = buffer_index + 7;
             }
-            Debug.handle();
-            file.close();
 
             while(1)
                 debugI("finished"); delayy(10000, Debug);
