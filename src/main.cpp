@@ -1,11 +1,10 @@
 #include <Arduino.h>
 #include <ESP32Servo.h>
-#include <Adafruit_BNO055.h>
+#include <Adafruit_ISM330DHCX.h>
 #include <FastLED.h>
 #include <Dynamixel2Arduino.h>
 #include <RemoteDebug.h>
 
-#include <utility/imumaths.h>
 #include <SPI.h>
 #include "Wire.h"
 #include "Adafruit_Sensor.h"
@@ -23,6 +22,7 @@
 
 CRGB leds[NUM_LEDS];
 const byte buttonPin = 27;
+bool check = true;
 
 // Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
@@ -54,22 +54,25 @@ using namespace ControlTableItem;
 /*
     IMU setup
 */
-uint16_t BNO055_SAMPLERATE_DELAY_MS = 10; // Set the delay between fresh samples
-Adafruit_BNO055 bno = Adafruit_BNO055(55, 0x28);
+uint16_t SAMPLERATE_DELAY_US = 4807; // Set the delay between fresh samples
+Adafruit_ISM330DHCX ism330dhcx;
+sensors_event_t accel;
+sensors_event_t gyro;
+sensors_event_t temp;
 
 /**
  * check we are actually getting IMU data
  */
 void imu_check()
 {
-    sensors_event_t accelerometer_data;
-    bno.getEvent(&accelerometer_data, Adafruit_BNO055::VECTOR_ACCELEROMETER);
-    if (accelerometer_data.acceleration.y == 0)
+    ism330dhcx.getEvent(&accel, &gyro, &temp);
+    if (accel.acceleration.y == 0)
     {
         Serial.println("Accelerometer reading 0");
         debugI("Accelerometer reading 0");
         FastLED.showColor(CRGB::Red);
-        delayy(1000, Debug);
+        while(1)
+            delayy(1000, Debug);
     }
 }
 
@@ -155,13 +158,14 @@ void servo_setup()
  */
 void imu_start()
 {
-    if (!bno.begin())
+    if (!ism330dhcx.begin_I2C())
     {
-        Serial.println("Ooops, no BNO055 detected ... Check your wiring or I2C ADDR!");
-        debugI("IMU not detected");
+        Serial.println("no IMU detected");
+        debugI("no IMU detected");
         FastLED.showColor(CRGB::Red);
+        while(1)
+            delayy(1000, Debug);
     }
-    bno.setExtCrystalUse(true);
 }
 
 /**
@@ -209,22 +213,20 @@ void loop()
     tStart = micros();
 
     // telemetry send
-    sensors_event_t orientation_data, accelerometer_data;
-    bno.getEvent(&orientation_data, Adafruit_BNO055::VECTOR_EULER);
-    bno.getEvent(&accelerometer_data, Adafruit_BNO055::VECTOR_ACCELEROMETER);
+    ism330dhcx.getEvent(&accel, &gyro, &temp);
     unsigned long current_time = micros() - allTime;
     debugI("%lu    %f    %f    %f    %f    %f    %f",
            current_time,
-           orientation_data.orientation.x,
-           orientation_data.orientation.y,
-           orientation_data.orientation.z,
-           accelerometer_data.acceleration.x,
-           accelerometer_data.acceleration.y,
-           accelerometer_data.acceleration.z
+           gyro.gyro.x,
+           gyro.gyro.y,
+           gyro.gyro.z,
+           accel.acceleration.x,
+           accel.acceleration.y,
+           accel.acceleration.z
         );
     Debug.handle();
 
-    while ((micros() - tStart) < (BNO055_SAMPLERATE_DELAY_MS * 1000))
+    if ((micros() - tStart) < SAMPLERATE_DELAY_US)
     {
         // vary the LED colour so we know the loop is still running
         leds[0].r++;
@@ -232,9 +234,12 @@ void loop()
             leds[0].r = 0;
         FastLED.show();
 
-        if(current_time > 500000){
-            dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
-            dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
+        if(check){
+            if(current_time > 500000){
+                dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
+                dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
+                check = false;
+            }
         }
     }
 }
