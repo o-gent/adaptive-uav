@@ -4,6 +4,7 @@
 #include <FastLED.h>
 #include <Dynamixel2Arduino.h>
 #include <RemoteDebug.h>
+#include "SPIFFS.h"
 
 #include <SPI.h>
 #include "Wire.h"
@@ -23,6 +24,7 @@
 CRGB leds[NUM_LEDS];
 const byte buttonPin = 27;
 bool check = true;
+File file
 
 // Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
@@ -201,6 +203,12 @@ void setup()
     dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
     dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
 
+    if(!SPIFFS.begin(true)){
+      debugW("An Error has occurred while mounting SPIFFS");
+    }
+
+    file = SPIFFS.open("/data.txt", FILE_WRITE);
+
     wait_for_button_press();
 
     countdown(5);
@@ -218,13 +226,10 @@ void setup()
 void loop()
 {
     tStart = micros();
-
-    // telemetry send
     ism330dhcx.getEvent(&accel, &gyro, &temp);
     unsigned long current_time = micros() - allTime;
     
-    //raw_telem.println()
-    Debug.println("%lu    %f    %f    %f    %f    %f    %f",
+    file.print("%lu    %f    %f    %f    %f    %f    %f    \n",
            current_time,
            gyro.gyro.x,
            gyro.gyro.y,
@@ -233,8 +238,7 @@ void loop()
            accel.acceleration.y,
            accel.acceleration.z
         );
-    Debug.handle();
-
+    
     if ((micros() - tStart) < SAMPLERATE_DELAY_US)
     {
         if(check){
@@ -243,6 +247,21 @@ void loop()
                 dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
                 check = false;
             }
+        }
+
+        if(current_time > 5000000){
+            // close the file and write the file to telemetry
+            file.close();
+
+            file = SPIFFS.open("/data.txt", FILE_READ);
+            while(file.available()){
+                Debug.print(file.read());
+            }
+            Debug.handle();
+            file.close();
+
+            while(1)
+                debugI("finished"); delayy(1000);
         }
     }
 }
