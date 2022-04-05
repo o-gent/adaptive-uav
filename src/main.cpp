@@ -166,6 +166,10 @@ void imu_start()
         while(1)
             delayy(1000, Debug);
     }
+    ism330dhcx.setAccelRange(LSM6DS_ACCEL_RANGE_16_G);
+    ism330dhcx.setGyroRange(ISM330DHCX_GYRO_RANGE_4000_DPS);
+    ism330dhcx.setAccelDataRate(LSM6DS_RATE_416_HZ);
+    ism330dhcx.setGyroDataRate(LSM6DS_RATE_416_HZ);
 }
 
 /**
@@ -215,7 +219,7 @@ void loop()
     // telemetry send
     ism330dhcx.getEvent(&accel, &gyro, &temp);
     unsigned long current_time = micros() - allTime;
-    debugI("%lu    %f    %f    %f    %f    %f    %f",
+    Debug.println("%lu    %f    %f    %f    %f    %f    %f",
            current_time,
            gyro.gyro.x,
            gyro.gyro.y,
@@ -235,7 +239,7 @@ void loop()
         FastLED.show();
 
         if(check){
-            if(current_time > 500000){
+            if(current_time > 800000){
                 dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
                 dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
                 check = false;
