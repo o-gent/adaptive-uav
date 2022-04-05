@@ -24,7 +24,7 @@
 CRGB leds[NUM_LEDS];
 const byte buttonPin = 27;
 bool check = true;
-File file
+File file;
 
 // Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
@@ -40,7 +40,7 @@ RemoteDebug Debug;
 // SSID and password to local network
 const char *ssid = "DESKTOP-2J7JM8Q 6736";
 const char *password = "MjTNaC$VB4SA";
-WiFiClient raw_telem;
+//WiFiClient raw_telem;
 
 /*
     Servo setup
@@ -57,7 +57,7 @@ using namespace ControlTableItem;
 /*
     IMU setup
 */
-uint16_t SAMPLERATE_DELAY_US = 4807; // Set the delay between fresh samples
+uint16_t SAMPLERATE_DELAY_US = 2500; // Set the delay between fresh samples
 Adafruit_ISM330DHCX ism330dhcx;
 sensors_event_t accel;
 sensors_event_t gyro;
@@ -138,7 +138,7 @@ void wifi_telem_setup()
     Serial.print("WiFI connected. IP address: ");
     Serial.println(WiFi.localIP());
 
-    raw_telem = Debug.getTelnetClient();
+    //raw_telem = Debug.getTelnetClient();
 }
 
 /**
@@ -217,6 +217,7 @@ void setup()
 
     allTime = micros();
     debugW("Launch");
+    Debug.handle();
 }
 
 /**
@@ -229,7 +230,7 @@ void loop()
     ism330dhcx.getEvent(&accel, &gyro, &temp);
     unsigned long current_time = micros() - allTime;
     
-    file.print("%lu    %f    %f    %f    %f    %f    %f    \n",
+    file.printf("%lu\t%f\t%f\t%f\t%f\t%f\t%f\n",
            current_time,
            gyro.gyro.x,
            gyro.gyro.y,
@@ -255,13 +256,14 @@ void loop()
 
             file = SPIFFS.open("/data.txt", FILE_READ);
             while(file.available()){
-                Debug.print(file.read());
+                String line = file.readStringUntil('\n');
+                Debug.println(line);
             }
             Debug.handle();
             file.close();
 
             while(1)
-                debugI("finished"); delayy(1000);
+                debugI("finished"); delayy(10000, Debug);
         }
     }
 }

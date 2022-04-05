@@ -3,13 +3,15 @@ from telnetlib import Telnet
 import time
 from uav_launcher.catapult import Catapult
 
+CATAPULT = False
+
 
 record_time = time.strftime('%Y%m%d-%H%M%S')
 f = open(f"logs/log_{record_time}.log", "w+")
 
 store = []
 
-catapult = Catapult()
+if CATAPULT: catapult = Catapult()
 
 tn = Telnet(f'192.168.137.{input("IP ending:")}', 23)
 try:
@@ -17,10 +19,9 @@ try:
         newline:str = tn.read_until(match=b'\n', timeout=1).decode("utf-8")
         print(newline)
         if newline == "":
-            raise
-        if newline.find("Launch")>0:
-            catapult.launch(10, 150)
             pass
+        if newline.find("Launch")>0:
+            if CATAPULT: catapult.launch(10, 150)
         store.append(newline)
 except:
     print("Connection closed")
@@ -40,6 +41,6 @@ for line in log:
 import pandas as pd
 pd.DataFrame(newstore).to_csv(f"logs/{record_time}_processed.csv")
 
-input("press enter to reset catapult")
+if CATAPULT: input("press enter to reset catapult")
 
-catapult.set_location(0)
+if CATAPULT: catapult.set_location(0)
