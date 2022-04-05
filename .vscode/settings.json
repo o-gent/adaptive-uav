@@ -2,5 +2,15 @@
     "cSpell.enableFiletypes": [
         "!cpp",
         "!python"
-    ]
+    ],
+    "files.associations": {
+        "*.tcc": "cpp",
+        "exception": "cpp",
+        "fstream": "cpp",
+        "iosfwd": "cpp",
+        "new": "cpp",
+        "ostream": "cpp",
+        "sstream": "cpp",
+        "streambuf": "cpp"
+    }
 }

@@ -38,6 +38,7 @@ RemoteDebug Debug;
 // SSID and password to local network
 const char *ssid = "DESKTOP-2J7JM8Q 6736";
 const char *password = "MjTNaC$VB4SA";
+WiFiClient raw_telem;
 
 /*
     Servo setup
@@ -134,6 +135,8 @@ void wifi_telem_setup()
 
     Serial.print("WiFI connected. IP address: ");
     Serial.println(WiFi.localIP());
+
+    raw_telem = Debug.getTelnetClient();
 }
 
 /**
@@ -219,6 +222,8 @@ void loop()
     // telemetry send
     ism330dhcx.getEvent(&accel, &gyro, &temp);
     unsigned long current_time = micros() - allTime;
+    
+    //raw_telem.println()
     Debug.println("%lu    %f    %f    %f    %f    %f    %f",
            current_time,
            gyro.gyro.x,
@@ -232,12 +237,6 @@ void loop()
 
     if ((micros() - tStart) < SAMPLERATE_DELAY_US)
     {
-        // vary the LED colour so we know the loop is still running
-        leds[0].r++;
-        if (leds[0].r == 254)
-            leds[0].r = 0;
-        FastLED.show();
-
         if(check){
             if(current_time > 800000){
                 dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
