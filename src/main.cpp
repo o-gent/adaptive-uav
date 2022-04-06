@@ -59,7 +59,7 @@ using namespace ControlTableItem;
 /*
     IMU setup
 */
-#define SAMPLERATE_DELAY_US 5000; // Set the delay between fresh samples
+#define SAMPLERATE_DELAY_US 3000 // Set the delay between fresh samples
 Adafruit_ISM330DHCX ism330dhcx;
 sensors_event_t accel;
 sensors_event_t gyro;
@@ -264,7 +264,10 @@ void loop()
             }
 
             while(1)
-                debugI("finished"); delayy(10000, Debug);
+                debugI("finished"); delayy(1000000, Debug);
         }
     }
+
+    while((micros() - tStart) < SAMPLERATE_DELAY_US)
+        delayMicroseconds(1);
 }
