@@ -34,6 +34,9 @@ uint32_t mLastTime = 0;
 uint32_t mTimeSeconds = 0;
 unsigned long current_time = 0;
 
+TaskHandle_t Task1;
+TaskHandle_t Task2;
+
 /*
     Debug library stuff
 */
@@ -55,6 +58,7 @@ const uint8_t ELEVATOR_ID = 4;
 const float DXL_PROTOCOL_VERSION = 2.0;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
+float elevator_position = 0;
 
 /*
     IMU setup
@@ -173,10 +177,33 @@ void imu_start()
         while(1)
             delayy(1000, Debug);
     }
-    ism330dhcx.setAccelRange(LSM6DS_ACCEL_RANGE_16_G);
+    ism330dhcx.setAccelRange(LSM6DS_ACCEL_RANGE_8_G);
     ism330dhcx.setGyroRange(ISM330DHCX_GYRO_RANGE_4000_DPS);
     ism330dhcx.setAccelDataRate(LSM6DS_RATE_416_HZ);
     ism330dhcx.setGyroDataRate(LSM6DS_RATE_416_HZ);
+}
+
+/**
+ * actuate the servos at the required time
+ */ 
+void actuate(void * pvParameters){
+    if(check){
+        if(current_time > 500000){
+            dxl.setGoalPosition(ELEVATOR_ID, 35, UNIT_DEGREE);
+            dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
+            check = false;
+        }
+        delayMicroseconds(1);
+    }
+    else {
+        // task finished
+        delayMicroseconds(100000);
+    }
+}
+
+void dxl_data(void * pvParameters){
+    delayMicroseconds(1000);
+    elevator_position = dxl.getPresentPosition(ELEVATOR_ID, UNIT_DEGREE);
 }
 
 /**
@@ -201,7 +228,7 @@ void setup()
     
     FastLED.showColor(CRGB::AntiqueWhite);
 
-    dxl.setGoalPosition(ELEVATOR_ID, 75, UNIT_DEGREE);
+    dxl.setGoalPosition(ELEVATOR_ID, 65, UNIT_DEGREE);
     dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
     dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
 
@@ -210,6 +237,32 @@ void setup()
     countdown(5);
 
     imu_check();
+
+    xTaskCreatePinnedToCore(
+        actuate,        /* Task function. */
+        "actuate",      /* name of task. */
+        10000,          /* Stack size of task */
+        NULL,           /* parameter of the task */
+        1,              /* priority of the task */
+        &Task1,         /* Task handle to keep track of created task */
+        0               /* pin task to core 0 */
+    );
+    
+    xTaskCreatePinnedToCore(
+        dxl_data,        /* Task function. */
+        "dxl_data",      /* name of task. */
+        10000,          /* Stack size of task */
+        NULL,           /* parameter of the task */
+        1,              /* priority of the task */
+        &Task2,         /* Task handle to keep track of created task */
+        0               /* pin task to core 0 */
+    );
+
+    // printf( "Task Name\tStatus\tPrio\tHWM\tTask\tAffinity\n");
+    // char stats_buffer[1024];
+    // vTaskList(stats_buffer);
+    // printf("%s\n", stats_buffer);
+
 
     allTime = micros();
     debugW("Launch");
@@ -233,38 +286,32 @@ void loop()
     buffer[buffer_index+4] = accel.acceleration.x;
     buffer[buffer_index+5] = accel.acceleration.y;
     buffer[buffer_index+6] = accel.acceleration.z;
-    buffer_index = buffer_index + 7;
+    buffer[buffer_index+7] = elevator_position;
+    buffer_index = buffer_index + 8;
     
     if ((micros() - tStart) < SAMPLERATE_DELAY_US)
     {
-        if(check){
-            if(current_time > 800000){
-                dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
-                dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
-                check = false;
-            }
-        }
 
-        if(current_time > 5000000){
+        if(current_time > 3000000){
             unsigned int buffer_index_end = buffer_index;
             buffer_index = 0;
 
             while(buffer_index <= buffer_index_end){
-                debugI("%lu\t%f\t%f\t%f\t%f\t%f\t%f\n",
+                debugI("%lu\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",
                     (unsigned long)buffer[buffer_index],
                     buffer[buffer_index+1],
                     buffer[buffer_index+2],
                     buffer[buffer_index+3],
                     buffer[buffer_index+4],
                     buffer[buffer_index+5],
-                    buffer[buffer_index+6]
+                    buffer[buffer_index+6],
+                    buffer[buffer_index+7]
                 );
-                Debug.handle();
-                buffer_index = buffer_index + 7;
+                buffer_index = buffer_index + 8;
             }
 
             while(1)
-                debugI("finished"); delayy(1000000, Debug);
+                debugI("finished");Debug.handle();delayy(1000, Debug);
         }
     }
 
