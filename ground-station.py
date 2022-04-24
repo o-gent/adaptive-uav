@@ -35,7 +35,7 @@ for line in log:
     try:
         if line == "(delayy)(C0) waiting":
             continue
-        filtered = line.replace("\r\n", "").split("(C0)")[1]
+        filtered = line.replace("\r\n", "").split(r"0m")[1]#.split("(C0)")[1]
         filtered = filtered.split("\t")
         newstore.append(filtered)
     except:

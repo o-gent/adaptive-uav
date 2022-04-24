@@ -30,6 +30,8 @@ unsigned int buffer_index = 0;
 TaskHandle_t Task1;
 TaskHandle_t Task2;
 
+File file;
+
 
 // Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
@@ -59,6 +61,7 @@ const uint8_t ELEVATOR_ID = 4;
 const float DXL_PROTOCOL_VERSION = 2.0;
 Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
 using namespace ControlTableItem;
+volatile float elevator_position;
 
 /*
     IMU setup
@@ -201,7 +204,8 @@ void loopy(void * pvParameters){
     buffer[buffer_index+4] = accel.acceleration.x;
     buffer[buffer_index+5] = accel.acceleration.y;
     buffer[buffer_index+6] = accel.acceleration.z;
-    buffer_index = buffer_index + 7;
+    buffer[buffer_index+7] = 0;
+    buffer_index = buffer_index + 8;
 
     if(current_time > 3000000){
 
@@ -209,21 +213,24 @@ void loopy(void * pvParameters){
         buffer_index = 0;
 
         while(buffer_index <= buffer_index_end){
-            debugI("%lu\t%f\t%f\t%f\t%f\t%f\t%f\n",
+            file.printf("%lu\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",
                 (unsigned long)buffer[buffer_index],
                 buffer[buffer_index+1],
                 buffer[buffer_index+2],
                 buffer[buffer_index+3],
                 buffer[buffer_index+4],
                 buffer[buffer_index+5],
-                buffer[buffer_index+6]
+                buffer[buffer_index+6],
+                buffer[buffer_index+7]
             );
-            Debug.handle();
-            buffer_index = buffer_index + 7;
+            buffer_index = buffer_index + 8;
         }
+        
+        file.close();
 
-        while(1)
-            delayy(1000, Debug);
+        delay(1000);
+
+        ESP.restart();
     }
 
     while((micros() - tStart) < SAMPLERATE_DELAY_US)
@@ -240,7 +247,8 @@ void actuate(void * pvParameters){
                 check = false;
             }
         }
-        vTaskDelay(1);
+        //elevator_position = dxl.getPresentPosition(ELEVATOR_ID, UNIT_DEGREE);
+        vTaskDelay(10);
     }
 }
 
@@ -256,7 +264,7 @@ void setup()
 
     // RBG LED SETUP
     FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS); // GRB ordering is assumed
-    FastLED.showColor(CRGB::Chocolate);
+    FastLED.showColor(CRGB::ForestGreen);
 
     wifi_telem_setup();
 
@@ -270,7 +278,25 @@ void setup()
     dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
     dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
 
+    if(!SPIFFS.begin(true)){
+      debugW("An Error has occurred while mounting SPIFFS");
+    }
+
     wait_for_button_press();
+
+    file = SPIFFS.open("/data.txt", FILE_READ);
+    while(file.available()){
+        String line = file.readStringUntil('\n');
+        Debug.println(line);
+    }
+    Debug.handle();
+    file.close();
+
+    FastLED.showColor(CRGB::Amethyst);
+
+    wait_for_button_press();
+
+    file = SPIFFS.open("/data.txt", FILE_WRITE);
 
     countdown(5);
 
@@ -296,9 +322,11 @@ void setup()
         1               /* pin task to core 0 */
     );
 
-    // debugW("Launch");
-    // Debug.handle();
+    debugW("Launch");
+    Debug.handle();
     
+    Debug.disconnect();
+    WiFi.disconnect();
     allTime = micros();
 }
 
@@ -308,4 +336,5 @@ void setup()
  */
 void loop()
 {
+    vTaskSuspend(NULL);
 }
