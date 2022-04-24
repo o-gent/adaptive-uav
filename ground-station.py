@@ -1,7 +1,7 @@
 # https://docs.python.org/3/library/telnetlib.html
 from telnetlib import Telnet
 import time
-from uav_launcher.catapult import Catapult
+#from uav_launcher.catapult import Catapult
 
 CATAPULT = False
 
@@ -33,7 +33,10 @@ log = store[37:]
 newstore = []
 for line in log:
     try:
-        filtered = line.replace("\r\n", "").split("(C1)")[1].split("    ")
+        if line == "(delayy)(C0) waiting":
+            continue
+        filtered = line.replace("\r\n", "").split("(C0)")[1]
+        filtered = filtered.split("\t")
         newstore.append(filtered)
     except:
         print("failed to parse a line")

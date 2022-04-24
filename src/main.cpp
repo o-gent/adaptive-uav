@@ -23,22 +23,20 @@
 
 CRGB leds[NUM_LEDS];
 const byte buttonPin = 27;
-
-volatile bool started = false;
-
 bool check = true;
 float buffer[17500];
 unsigned int buffer_index = 0;
+
+TaskHandle_t Task1;
+TaskHandle_t Task2;
+
 
 // Time
 unsigned long allTime = 0; // keep track of how long the UAV is in the air for
 unsigned long tStart = 0;  // keep track of loop time
 uint32_t mLastTime = 0;
 uint32_t mTimeSeconds = 0;
-unsigned long current_time = 0;
-
-TaskHandle_t Task1;
-TaskHandle_t Task2;
+volatile unsigned long current_time = 0;
 
 /*
     Debug library stuff
@@ -49,6 +47,18 @@ RemoteDebug Debug;
 const char *ssid = "DESKTOP-2J7JM8Q 6736";
 const char *password = "MjTNaC$VB4SA";
 //WiFiClient raw_telem;
+
+/*
+    Servo setup
+*/
+#define DXL_SERIAL Serial2
+const uint8_t DXL_DIR_PIN = A4; // DYNAMIXEL Shield DIR PIN
+const uint8_t DIHEDRAL_ID = 2;
+const uint8_t SWEEP_ID = 3;
+const uint8_t ELEVATOR_ID = 4;
+const float DXL_PROTOCOL_VERSION = 2.0;
+Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
+using namespace ControlTableItem;
 
 /*
     IMU setup
@@ -140,6 +150,19 @@ void wifi_telem_setup()
 /**
  * start and arm servos
  */
+void servo_setup()
+{
+    dxl.begin(57600);
+    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
+    
+    for(int ID = 2; ID<=4; ID++)
+    {
+        dxl.torqueOff(ID);
+        dxl.setOperatingMode(ID, OP_POSITION);
+        dxl.writeControlTableItem(PROFILE_VELOCITY, ID, 0); // Use 0 for Max speed
+        dxl.torqueOn(ID);
+    }
+}
 
 /**
  * start the IMU
@@ -160,64 +183,65 @@ void imu_start()
     ism330dhcx.setGyroDataRate(LSM6DS_RATE_416_HZ);
 }
 
-/**
- * actuate the servos at the required time
- */ 
+void loopy(void * pvParameters){
+    
+    
+    while(1){
+
+    tStart = micros();
+    
+    ism330dhcx.getEvent(&accel, &gyro, &temp);
+    
+    current_time = micros() - allTime;
+    
+    buffer[buffer_index] = current_time;
+    buffer[buffer_index+1] = gyro.gyro.x;
+    buffer[buffer_index+2] = gyro.gyro.y;
+    buffer[buffer_index+3] = gyro.gyro.z;
+    buffer[buffer_index+4] = accel.acceleration.x;
+    buffer[buffer_index+5] = accel.acceleration.y;
+    buffer[buffer_index+6] = accel.acceleration.z;
+    buffer_index = buffer_index + 7;
+
+    if(current_time > 3000000){
+
+        unsigned int buffer_index_end = buffer_index;
+        buffer_index = 0;
+
+        while(buffer_index <= buffer_index_end){
+            debugI("%lu\t%f\t%f\t%f\t%f\t%f\t%f\n",
+                (unsigned long)buffer[buffer_index],
+                buffer[buffer_index+1],
+                buffer[buffer_index+2],
+                buffer[buffer_index+3],
+                buffer[buffer_index+4],
+                buffer[buffer_index+5],
+                buffer[buffer_index+6]
+            );
+            Debug.handle();
+            buffer_index = buffer_index + 7;
+        }
+
+        while(1)
+            delayy(1000, Debug);
+    }
+
+    while((micros() - tStart) < SAMPLERATE_DELAY_US)
+        delayMicroseconds(1);
+    }
+}
+
 void actuate(void * pvParameters){
-    bool check = true;
-    /*
-    Servo setup
-    */
-    #define DXL_SERIAL Serial2
-    const uint8_t DXL_DIR_PIN = A4; // DYNAMIXEL Shield DIR PIN
-    const uint8_t DIHEDRAL_ID = 2;
-    const uint8_t SWEEP_ID = 3;
-    const uint8_t ELEVATOR_ID = 4;
-    const float DXL_PROTOCOL_VERSION = 2.0;
-    Dynamixel2Arduino dxl(DXL_SERIAL, DXL_DIR_PIN);
-    using namespace ControlTableItem;
-    float elevator_position = 0;
-
-    dxl.begin(57600);
-    dxl.setPortProtocolVersion(DXL_PROTOCOL_VERSION);
-    
-    for(int ID = 2; ID<=4; ID++)
-    {
-        dxl.torqueOff(ID);
-        dxl.setOperatingMode(ID, OP_POSITION);
-        dxl.writeControlTableItem(PROFILE_VELOCITY, ID, 0); // Use 0 for Max speed
-        dxl.torqueOn(ID);
-    }
-    
-    dxl.setGoalPosition(ELEVATOR_ID, 65, UNIT_DEGREE);
-    dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
-    dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
-
-    while(!started){
-        vTaskDelay(1);
-    }
-
-    const unsigned long allTime = micros();
-
     while(1){
         if(check){
-            if(micros() - allTime > 500000){
-                dxl.setGoalPosition(ELEVATOR_ID, 35, UNIT_DEGREE);
+            if(current_time > 800000){
+                dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
                 dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
                 check = false;
             }
         }
-        else {
-            vTaskDelay(2/portTICK_PERIOD_MS);
-        }
-        vTaskDelay(2/portTICK_PERIOD_MS);
-        elevator_position =  dxl.getPresentPosition(ELEVATOR_ID, UNIT_DEGREE);
+        vTaskDelay(1);
     }
-    vTaskDelete(NULL);
-}
-
-void loopy(void * pvParameters)
-{
 }
 
 /**
@@ -238,87 +262,50 @@ void setup()
 
     imu_start();
 
+    servo_setup();
+    
     FastLED.showColor(CRGB::AntiqueWhite);
 
+    dxl.setGoalPosition(ELEVATOR_ID, 65, UNIT_DEGREE);
+    dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
+    dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
+
     wait_for_button_press();
-
-    // xTaskCreatePinnedToCore(
-    //     actuate,        /* Task function. */
-    //     "actuate",      /* name of task. */
-    //     10000,          /* Stack size of task */
-    //     NULL,           /* parameter of the task */
-    //     2,              /* priority of the task */
-    //     &Task1,         /* Task handle to keep track of created task */
-    //     0               /* pin task to core 0 */
-    // );
-
-    // xTaskCreatePinnedToCore(
-    //     loopy,        /* Task function. */
-    //     "loopy",      /* name of task. */
-    //     90000,          /* Stack size of task */
-    //     NULL,           /* parameter of the task */
-    //     1,              /* priority of the task */
-    //     &Task2,         /* Task handle to keep track of created task */
-    //     1               /* pin task to core 0 */
-    // );
 
     countdown(5);
 
     imu_check();
 
-    debugW("Launch");
-    Debug.handle();
-    started = true;
+    xTaskCreatePinnedToCore(
+        loopy,        /* Task function. */
+        "loopy",      /* name of task. */
+        10000,          /* Stack size of task */
+        NULL,           /* parameter of the task */
+        1,              /* priority of the task */
+        &Task1,         /* Task handle to keep track of created task */
+        0               /* pin task to core 0 */
+    );
+
+    xTaskCreatePinnedToCore(
+        actuate,        /* Task function. */
+        "actuate",      /* name of task. */
+        10000,          /* Stack size of task */
+        NULL,           /* parameter of the task */
+        2,              /* priority of the task */
+        &Task2,         /* Task handle to keep track of created task */
+        1               /* pin task to core 0 */
+    );
+
+    // debugW("Launch");
+    // Debug.handle();
+    
+    allTime = micros();
 }
 
 /**
  * Send new data (IMU, Servo)
  * calaculate / command servo positions
  */
-
-
 void loop()
 {
-    tStart = micros();
-    ism330dhcx.getEvent(&accel, &gyro, &temp);
-    current_time = micros() - allTime;
-    
-    buffer[buffer_index] = current_time;
-    buffer[buffer_index+1] = gyro.gyro.x;
-    buffer[buffer_index+2] = gyro.gyro.y;
-    buffer[buffer_index+3] = gyro.gyro.z;
-    buffer[buffer_index+4] = accel.acceleration.x;
-    buffer[buffer_index+5] = accel.acceleration.y;
-    buffer[buffer_index+6] = accel.acceleration.z;
-    buffer[buffer_index+7] = 0;
-    buffer_index = buffer_index + 8;
-    
-    if ((micros() - tStart) < SAMPLERATE_DELAY_US)
-    {
-
-        if(current_time > 3000000){
-            unsigned int buffer_index_end = buffer_index;
-            buffer_index = 0;
-
-            while(buffer_index <= buffer_index_end){
-                debugI("%lu\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",
-                    (unsigned long)buffer[buffer_index],
-                    buffer[buffer_index+1],
-                    buffer[buffer_index+2],
-                    buffer[buffer_index+3],
-                    buffer[buffer_index+4],
-                    buffer[buffer_index+5],
-                    buffer[buffer_index+6],
-                    buffer[buffer_index+7]
-                );
-                buffer_index = buffer_index + 8;
-            }
-
-            while(1)
-                delayy(1000, Debug);
-        }
-    }
-
-    while((micros() - tStart) < SAMPLERATE_DELAY_US)
-        delayMicroseconds(1);
 }
