@@ -186,7 +186,10 @@ void imu_start()
     ism330dhcx.setGyroDataRate(LSM6DS_RATE_416_HZ);
 }
 
-void loopy(void * pvParameters){
+/**
+ * Core 0 loop for data storing
+ */
+void record(void * pvParameters){
     
     
     while(1){
@@ -238,12 +241,20 @@ void loopy(void * pvParameters){
     }
 }
 
+
+/**
+ * Core 1 loop for actuating servos
+ */
 void actuate(void * pvParameters){
     while(1){
         if(check){
             if(current_time > 800000){
                 dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
                 dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
+            }
+            if(current_time > 9000000){
+                dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
+                dxl.setGoalPosition(SWEEP_ID, 250, UNIT_DEGREE);
                 check = false;
             }
         }
@@ -266,17 +277,18 @@ void setup()
     FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS); // GRB ordering is assumed
     FastLED.showColor(CRGB::ForestGreen);
 
+    servo_setup();
+
+    dxl.setGoalPosition(ELEVATOR_ID, 65, UNIT_DEGREE);
+    dxl.setGoalPosition(DIHEDRAL_ID, 250, UNIT_DEGREE);
+    dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
+
     wifi_telem_setup();
 
     imu_start();
 
-    servo_setup();
-    
     FastLED.showColor(CRGB::AntiqueWhite);
 
-    dxl.setGoalPosition(ELEVATOR_ID, 65, UNIT_DEGREE);
-    dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
-    dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
 
     if(!SPIFFS.begin(true)){
       debugW("An Error has occurred while mounting SPIFFS");
@@ -294,6 +306,8 @@ void setup()
 
     FastLED.showColor(CRGB::Amethyst);
 
+    delay(1000);
+
     wait_for_button_press();
 
     file = SPIFFS.open("/data.txt", FILE_WRITE);
@@ -303,8 +317,8 @@ void setup()
     imu_check();
 
     xTaskCreatePinnedToCore(
-        loopy,        /* Task function. */
-        "loopy",      /* name of task. */
+        record,        /* Task function. */
+        "record",      /* name of task. */
         10000,          /* Stack size of task */
         NULL,           /* parameter of the task */
         1,              /* priority of the task */
