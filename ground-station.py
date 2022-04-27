@@ -3,7 +3,7 @@ from telnetlib import Telnet
 import time
 from uav_launcher.catapult import Catapult
 
-CATAPULT = False
+CATAPULT = True
 store = []
 
 record_time = time.strftime('%Y%m%d-%H%M%S')

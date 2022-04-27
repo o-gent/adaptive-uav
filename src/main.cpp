@@ -248,18 +248,15 @@ void record(void * pvParameters){
 void actuate(void * pvParameters){
     while(1){
         if(check){
-            if(current_time > 800000){
-                dxl.setGoalPosition(ELEVATOR_ID, 95, UNIT_DEGREE);
-                dxl.setGoalPosition(DIHEDRAL_ID, 30, UNIT_DEGREE);
-            }
-            if(current_time > 9000000){
+            if(current_time > 550000){
+                dxl.setGoalPosition(ELEVATOR_ID, 15, UNIT_DEGREE);
                 dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
                 dxl.setGoalPosition(SWEEP_ID, 250, UNIT_DEGREE);
                 check = false;
             }
         }
         //elevator_position = dxl.getPresentPosition(ELEVATOR_ID, UNIT_DEGREE);
-        vTaskDelay(10);
+        vTaskDelay(1);
     }
 }
 
