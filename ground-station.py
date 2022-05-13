@@ -3,7 +3,7 @@ from telnetlib import Telnet
 import time
 from uav_launcher.catapult import Catapult
 
-CATAPULT = True
+CATAPULT = False
 store = []
 
 record_time = time.strftime('%Y%m%d-%H%M%S')
@@ -20,7 +20,8 @@ try:
         if newline == "":
             pass
         if newline.find("Launch")>0:
-            if CATAPULT: catapult.launch(8, 150)
+            time.sleep(0.5)
+            if CATAPULT: catapult.launch(10, 150)
         store.append(newline)
 except:
     print("Connection closed")

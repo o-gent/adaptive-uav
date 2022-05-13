@@ -72,6 +72,8 @@ sensors_event_t accel;
 sensors_event_t gyro;
 sensors_event_t temp;
 
+extern "C" int rom_phy_get_vdd33();
+
 /**
  * check we are actually getting IMU data
  */
@@ -248,10 +250,10 @@ void record(void * pvParameters){
 void actuate(void * pvParameters){
     while(1){
         if(check){
-            if(current_time > 550000){
-                dxl.setGoalPosition(ELEVATOR_ID, 15, UNIT_DEGREE);
-                dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
-                dxl.setGoalPosition(SWEEP_ID, 250, UNIT_DEGREE);
+            if(current_time > 450000){
+                dxl.setGoalPosition(ELEVATOR_ID, 55, UNIT_DEGREE);
+                // dxl.setGoalPosition(DIHEDRAL_ID, 0, UNIT_DEGREE);
+                // dxl.setGoalPosition(SWEEP_ID, 200, UNIT_DEGREE);
                 check = false;
             }
         }
@@ -276,8 +278,8 @@ void setup()
 
     servo_setup();
 
-    dxl.setGoalPosition(ELEVATOR_ID, 65, UNIT_DEGREE);
-    dxl.setGoalPosition(DIHEDRAL_ID, 250, UNIT_DEGREE);
+    dxl.setGoalPosition(ELEVATOR_ID, 110, UNIT_DEGREE);
+    dxl.setGoalPosition(DIHEDRAL_ID, 295, UNIT_DEGREE);
     dxl.setGoalPosition(SWEEP_ID, 0, UNIT_DEGREE);
 
     wifi_telem_setup();
@@ -293,6 +295,8 @@ void setup()
 
     wait_for_button_press();
 
+    FastLED.showColor(CRGB::Orange);
+
     file = SPIFFS.open("/data.txt", FILE_READ);
     while(file.available()){
         String line = file.readStringUntil('\n');
@@ -301,7 +305,8 @@ void setup()
     Debug.handle();
     file.close();
 
-    FastLED.showColor(CRGB::Amethyst);
+    float voltage = ((float)rom_phy_get_vdd33()) / 1000;
+    Debug.println(voltage);
 
     delay(1000);
 
@@ -312,6 +317,11 @@ void setup()
     countdown(5);
 
     imu_check();
+
+    debugW("Launch");
+    Debug.handle();
+
+    delay(500);
 
     xTaskCreatePinnedToCore(
         record,        /* Task function. */
@@ -333,8 +343,6 @@ void setup()
         1               /* pin task to core 0 */
     );
 
-    debugW("Launch");
-    Debug.handle();
     
     Debug.disconnect();
     WiFi.disconnect();
